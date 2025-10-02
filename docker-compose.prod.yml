@@ -2,9 +2,7 @@ version: "3.8"
 
 services:
   metaweb:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/open-webui/open-webui:main
     container_name: metaweb-app
     ports:
       - "3000:8080"
@@ -40,7 +38,7 @@ services:
       - USER_PERMISSIONS_FEATURES_IMAGE_GENERATION=True
       
     volumes:
-      - metaweb-data:/app/data
+      - metaweb-data:/app/backend/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
