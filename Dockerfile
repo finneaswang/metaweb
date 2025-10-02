@@ -1,4 +1,4 @@
-# Multi-stage build for OpenWebUI Student Dashboard
+# Multi-stage build for MetaWeb with Assignments
 
 # Stage 1: Build frontend
 FROM node:20-alpine AS frontend-builder
@@ -8,7 +8,7 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies with increased memory
+# Install dependencies with legacy peer deps
 RUN npm install --legacy-peer-deps
 
 # Copy source code
@@ -38,6 +38,9 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 # Copy backend code
 COPY backend/ ./backend/
 
+# Copy CHANGELOG.md to the backend
+COPY CHANGELOG.md ./backend/open_webui/
+
 # Copy built frontend from stage 1
 COPY --from=frontend-builder /app/build ./build
 
@@ -53,4 +56,4 @@ ENV PORT=8080
 ENV DATA_DIR=/app/data
 
 # Run the application
-CMD ["python", "-m", "open_webui.main"]
+CMD ["bash", "backend/start.sh"]
