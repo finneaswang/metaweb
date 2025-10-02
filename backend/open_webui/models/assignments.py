@@ -11,7 +11,7 @@ from open_webui.models.users import Users, UserResponse
 
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import BigInteger, Boolean, Column, String, Text, JSON
+from sqlalchemy import BigInteger, Boolean, Column, String, Text, JSON, Float
 from sqlalchemy import or_, func, select, and_, text
 from sqlalchemy.sql import exists
 
@@ -24,13 +24,16 @@ class Assignment(Base):
     __tablename__ = "assignment"
 
     id = Column(Text, primary_key=True)
-    user_id = Column(Text)
+    teacher_id = Column(Text)  # 创建作业的老师
 
     title = Column(Text)
-    description = Column(Text, nullable=True)
+    description = Column(Text, nullable=True)  # 简短描述
+    content = Column(Text, nullable=True)  # 作业内容/要求（富文本）
     due_date = Column(Text)
-    status = Column(Text, default="pending")  # pending, submitted
-    submitted_at = Column(BigInteger, nullable=True)
+    
+    max_score = Column(Float, default=100.0)  # 满分
+    attachments = Column(JSON, nullable=True)  # 附件列表
+    status = Column(Text, default="draft")  # draft, published, closed
 
     access_control = Column(JSON, nullable=True)
 
@@ -42,18 +45,21 @@ class AssignmentModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    user_id: str
+    teacher_id: str
 
     title: str
     description: Optional[str] = None
+    content: Optional[str] = None
     due_date: str
-    status: str = "pending"
-    submitted_at: Optional[int] = None
+    
+    max_score: float = 100.0
+    attachments: Optional[list] = None
+    status: str = "draft"
 
     access_control: Optional[dict] = None
 
-    created_at: int  # timestamp in epoch
-    updated_at: int  # timestamp in epoch
+    created_at: int
+    updated_at: int
 
 
 ####################
@@ -64,35 +70,42 @@ class AssignmentModel(BaseModel):
 class AssignmentForm(BaseModel):
     title: str
     description: Optional[str] = None
+    content: Optional[str] = None
     due_date: str
-    status: Optional[str] = "pending"
+    max_score: Optional[float] = 100.0
+    attachments: Optional[list] = None
+    status: Optional[str] = "draft"
     access_control: Optional[dict] = None
 
 
 class AssignmentUpdateForm(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
+    content: Optional[str] = None
     due_date: Optional[str] = None
+    max_score: Optional[float] = None
+    attachments: Optional[list] = None
     status: Optional[str] = None
-    submitted_at: Optional[int] = None
     access_control: Optional[dict] = None
 
 
 class AssignmentUserResponse(AssignmentModel):
-    user: Optional[UserResponse] = None
+    teacher: Optional[UserResponse] = None
+    submission_count: Optional[int] = 0  # 提交数量
+    graded_count: Optional[int] = 0  # 已批改数量
 
 
 class AssignmentTable:
     def insert_new_assignment(
         self,
         form_data: AssignmentForm,
-        user_id: str,
+        teacher_id: str,
     ) -> Optional[AssignmentModel]:
         with get_db() as db:
             assignment = AssignmentModel(
                 **{
                     "id": str(uuid.uuid4()),
-                    "user_id": user_id,
+                    "teacher_id": teacher_id,
                     **form_data.model_dump(),
                     "created_at": int(time.time()),
                     "updated_at": int(time.time()),
@@ -117,14 +130,14 @@ class AssignmentTable:
             assignments = query.all()
             return [AssignmentModel.model_validate(assignment) for assignment in assignments]
 
-    def get_assignments_by_user_id(
+    def get_assignments_by_teacher_id(
         self,
-        user_id: str,
+        teacher_id: str,
         skip: Optional[int] = None,
         limit: Optional[int] = None,
     ) -> list[AssignmentModel]:
         with get_db() as db:
-            query = db.query(Assignment).filter(Assignment.user_id == user_id)
+            query = db.query(Assignment).filter(Assignment.teacher_id == teacher_id)
             query = query.order_by(Assignment.updated_at.desc())
 
             if skip is not None:
@@ -146,7 +159,6 @@ class AssignmentTable:
             user_groups = Groups.get_groups_by_member_id(user_id)
             user_group_ids = {group.id for group in user_groups}
 
-            # Order newest-first. We stream to keep memory usage low.
             query = (
                 db.query(Assignment)
                 .order_by(Assignment.updated_at.desc())
@@ -158,8 +170,8 @@ class AssignmentTable:
             n_skipped = 0
 
             for assignment in query:
-                # Fast-pass #1: owner
-                if assignment.user_id == user_id:
+                # Fast-pass #1: owner/teacher
+                if assignment.teacher_id == user_id:
                     permitted = True
                 # Fast-pass #2: public/open
                 elif assignment.access_control is None:
@@ -173,7 +185,6 @@ class AssignmentTable:
                 if not permitted:
                     continue
 
-                # Apply skip AFTER permission filtering so it counts only accessible assignments
                 if skip and n_skipped < skip:
                     n_skipped += 1
                     continue
@@ -199,18 +210,8 @@ class AssignmentTable:
 
             form_data_dict = form_data.model_dump(exclude_unset=True)
 
-            if "title" in form_data_dict:
-                assignment.title = form_data_dict["title"]
-            if "description" in form_data_dict:
-                assignment.description = form_data_dict["description"]
-            if "due_date" in form_data_dict:
-                assignment.due_date = form_data_dict["due_date"]
-            if "status" in form_data_dict:
-                assignment.status = form_data_dict["status"]
-            if "submitted_at" in form_data_dict:
-                assignment.submitted_at = form_data_dict["submitted_at"]
-            if "access_control" in form_data_dict:
-                assignment.access_control = form_data_dict["access_control"]
+            for key, value in form_data_dict.items():
+                setattr(assignment, key, value)
 
             assignment.updated_at = int(time.time())
 
