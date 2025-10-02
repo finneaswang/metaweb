@@ -1,0 +1,16 @@
+[Unit]
+Description=Open WebUI Application
+After=network.target
+
+[Service]
+Type=simple
+User=linuxuser
+WorkingDirectory=/home/linuxuser/openwebui
+Environment=PATH=/home/linuxuser/openwebui/venv/bin
+EnvironmentFile=/home/linuxuser/openwebui/.env
+ExecStart=/home/linuxuser/openwebui/venv/bin/python -m open_webui.main
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
