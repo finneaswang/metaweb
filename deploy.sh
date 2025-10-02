@@ -1,7 +1,7 @@
 #!/bin/bash
 
 echo "======================================"
-echo "MetaWeb 部署脚本"
+echo "MetaWeb 部署脚本（自定义镜像）"
 echo "======================================"
 echo ""
 
@@ -29,9 +29,14 @@ if [ ! -f ".env.production" ]; then
     exit 1
 fi
 
-# 拉取最新镜像
-echo "📦 拉取最新 Docker 镜像..."
-sudo docker compose -f docker-compose.prod.yml pull
+# 构建自定义镜像
+echo "🔨 构建自定义 Docker 镜像（包含 assignments 功能）..."
+sudo docker build -t metaweb-custom:latest .
+
+if [ $? -ne 0 ]; then
+    echo "❌ Docker 构建失败"
+    exit 1
+fi
 
 # 停止旧容器
 echo "🛑 停止旧容器..."
@@ -48,7 +53,7 @@ fi
 
 # 等待容器健康检查
 echo "⏳ 等待应用启动..."
-sleep 10
+sleep 15
 
 # 检查容器状态
 echo ""
@@ -62,5 +67,6 @@ echo "   sudo docker compose -f docker-compose.prod.yml logs -f"
 echo ""
 echo "🌐 访问地址："
 echo "   http://45.32.75.115:3000"
+echo "   http://45.32.75.115:3000/assignments  (Assignments 功能)"
 echo ""
 echo "======================================"
