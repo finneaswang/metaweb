@@ -1,0 +1,52 @@
+version: "3.8"
+
+services:
+  metaweb:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: metaweb-app
+    ports:
+      - "3000:8080"
+    environment:
+      # API配置
+      - OPENAI_API_BASE_URL=${OPENAI_API_BASE_URL}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      
+      # 安全配置
+      - WEBUI_AUTH=True
+      - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY}
+      - FORCE_ENABLE_SIGNUP=True
+      - DEFAULT_USER_ROLE=user
+      - ENABLE_LOGIN_FORM=True
+      - ENABLE_COMMUNITY_SHARING=False
+      
+      # 管理员权限
+      - ENABLE_ADMIN_CHAT_ACCESS=True
+      - ENABLE_ADMIN_EXPORT=True
+      
+      # 禁用Ollama（只使用OpenRouter）
+      - ENABLE_OLLAMA_API=False
+      
+      # 界面配置
+      - WEBUI_NAME=MetaWeb AI - 精选模型
+      - DEFAULT_MODELS=${DEFAULT_MODELS}
+      - ENABLE_VERSION_UPDATE_CHECK=false
+      
+      # 用户权限
+      - USER_PERMISSIONS_WORKSPACE_MODELS_ACCESS=True
+      - USER_PERMISSIONS_CHAT_FILE_UPLOAD=True
+      - USER_PERMISSIONS_FEATURES_WEB_SEARCH=True
+      - USER_PERMISSIONS_FEATURES_IMAGE_GENERATION=True
+      
+    volumes:
+      - metaweb-data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  metaweb-data:
