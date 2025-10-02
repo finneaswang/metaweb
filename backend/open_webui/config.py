@@ -1168,7 +1168,7 @@ MODEL_ORDER_LIST = PersistentConfig(
 DEFAULT_USER_ROLE = PersistentConfig(
     "DEFAULT_USER_ROLE",
     "ui.default_user_role",
-    os.getenv("DEFAULT_USER_ROLE", "pending"),
+    os.getenv("DEFAULT_USER_ROLE", "student"),
 )
 
 PENDING_USER_OVERLAY_TITLE = PersistentConfig(
