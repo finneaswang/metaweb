@@ -44,7 +44,7 @@ async def get_assignments(request: Request, user=Depends(get_verified_user)):
         AssignmentUserResponse(
             **{
                 **assignment.model_dump(),
-                "user": UserResponse(**Users.get_user_by_id(assignment.user_id).model_dump()),
+                "teacher": UserResponse(**Users.get_user_by_id(assignment.teacher_id).model_dump()),
             }
         )
         for assignment in Assignments.get_assignments_by_permission(user.id, "read")
@@ -91,8 +91,8 @@ async def get_assignment_list(
 async def create_new_assignment(
     request: Request, form_data: AssignmentForm, user=Depends(get_verified_user)
 ):
-    # Only admins can create assignments
-    if user.role != "admin":
+    # Only admins and teachers can create assignments
+    if user.role not in ["admin", "teacher"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=ERROR_MESSAGES.UNAUTHORIZED,
@@ -125,7 +125,7 @@ async def get_assignment_by_id(
 
     # Check if user has read access
     if user.role != "admin" and (
-        user.id != assignment.user_id
+        user.id != assignment.teacher_id
         and not has_access(user.id, type="read", access_control=assignment.access_control)
     ):
         raise HTTPException(
@@ -154,7 +154,7 @@ async def update_assignment_by_id(
         )
 
     # Only admin or assignment creator can update
-    if user.role != "admin" and user.id != assignment.user_id:
+    if user.role != "admin" and user.id != assignment.teacher_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail=ERROR_MESSAGES.DEFAULT()
         )
@@ -233,7 +233,7 @@ async def delete_assignment_by_id(
         )
 
     # Only admin or assignment creator can delete
-    if user.role != "admin" and user.id != assignment.user_id:
+    if user.role != "admin" and user.id != assignment.teacher_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail=ERROR_MESSAGES.DEFAULT()
         )
