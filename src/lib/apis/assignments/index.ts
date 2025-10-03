@@ -264,7 +264,7 @@ export const getAssignmentStatistics = async (
         }
     });
 
-    if (\!res.ok) {
+    if (!res.ok) {
         const error = await res.json();
         throw new Error(error.detail || "Failed to get assignment statistics");
     }
@@ -280,7 +280,7 @@ export const exportAssignmentGrades = async (token: string, id: string): Promise
         }
     });
 
-    if (\!res.ok) {
+    if (!res.ok) {
         const error = await res.json();
         throw new Error(error.detail || "Failed to export grades");
     }
