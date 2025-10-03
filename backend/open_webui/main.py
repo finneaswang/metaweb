@@ -81,6 +81,7 @@ from open_webui.routers import (
     assignments,
     submissions,
     llm_proxy,
+    nightly_analysis,
     folders,
     configs,
     groups,
@@ -1269,6 +1270,7 @@ app.include_router(notes.router, prefix="/api/v1/notes", tags=["notes"])
 app.include_router(assignments.router, prefix="/api/v1/assignments", tags=["assignments"])
 app.include_router(submissions.router, prefix="/api/v1/submissions", tags=["submissions"])
 app.include_router(llm_proxy.router, prefix="/api/v1/llm", tags=["llm"])
+app.include_router(nightly_analysis.router, prefix="/api/v1/nightly", tags=["nightly"])
 
 
 app.include_router(models.router, prefix="/api/v1/models", tags=["models"])
