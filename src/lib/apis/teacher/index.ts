@@ -49,7 +49,7 @@ export const askTeacherAI = async (
         body: JSON.stringify(request)
     });
 
-    if (\!res.ok) {
+    if (!res.ok) {
         const error = await res.json();
         throw new Error(error.detail || "Failed to ask teacher AI");
     }
@@ -66,7 +66,7 @@ export const getStudentList = async (token: string): Promise<StudentInfo[]> => {
         }
     });
 
-    if (\!res.ok) {
+    if (!res.ok) {
         const error = await res.json();
         throw new Error(error.detail || "Failed to get student list");
     }
