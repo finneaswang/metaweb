@@ -1688,7 +1688,7 @@ async def get_app_config(request: Request):
     onboarding = False
 
     if user is None:
-        onboarding = user_count == 0
+        onboarding = True  # 每次访问登录页面都显示欢迎页面
 
     return {
         **({"onboarding": True} if onboarding else {}),
