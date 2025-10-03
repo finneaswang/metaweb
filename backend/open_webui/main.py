@@ -80,6 +80,7 @@ from open_webui.routers import (
     notes,
     assignments,
     submissions,
+    llm_proxy,
     folders,
     configs,
     groups,
@@ -1267,6 +1268,7 @@ app.include_router(chats.router, prefix="/api/v1/chats", tags=["chats"])
 app.include_router(notes.router, prefix="/api/v1/notes", tags=["notes"])
 app.include_router(assignments.router, prefix="/api/v1/assignments", tags=["assignments"])
 app.include_router(submissions.router, prefix="/api/v1/submissions", tags=["submissions"])
+app.include_router(llm_proxy.router, prefix="/api/v1/llm", tags=["llm"])
 
 
 app.include_router(models.router, prefix="/api/v1/models", tags=["models"])
@@ -1688,7 +1690,7 @@ async def get_app_config(request: Request):
     onboarding = False
 
     if user is None:
-        onboarding = True  # 每次访问登录页面都显示欢迎页面
+        onboarding = user_count == 0
 
     return {
         **({"onboarding": True} if onboarding else {}),
