@@ -177,7 +177,7 @@
 		if (($config?.features.auth_trusted_header ?? false) || $config?.features.auth === false) {
 			await signInHandler();
 		} else {
-			onboarding = $config?.onboarding ?? false;
+			onboarding = true;  // 总是显示欢迎动画
 		}
 	});
 </script>
@@ -192,7 +192,10 @@
 	bind:show={onboarding}
 	getStartedHandler={() => {
 		onboarding = false;
-		mode = $config?.features.enable_ldap ? 'ldap' : 'signup';
+		// 如果是首次设置，进入注册模式；否则进入登录模式
+		mode = $config?.onboarding 
+			? 'signup' 
+			: ($config?.features.enable_ldap ? 'ldap' : 'signin');
 	}}
 />
 
