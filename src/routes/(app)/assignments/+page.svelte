@@ -17,6 +17,7 @@
 		gradeSubmission
 	} from '$lib/apis/submissions';
 	import { toast } from 'svelte-sonner';
+    import AssignmentStatistics from '/components/assignments/AssignmentStatistics.svelte';
 
 	const i18n = getContext('i18n');
 
@@ -421,6 +422,9 @@
 
 				<h3 class="text-lg font-semibold mb-3">学生提交</h3>
 				<div class="space-y-3">
+
+                <!-- Statistics Panel -->
+                <AssignmentStatistics assignmentId={selectedAssignment.id} show={userRole === 'teacher' || userRole === 'admin'} />
 					{#if assignmentSubmissions.length === 0}
 						<div class="text-center py-8 text-gray-500">暂无提交</div>
 					{:else}

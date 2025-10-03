@@ -246,3 +246,155 @@ async def delete_assignment_by_id(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.DEFAULT()
         )
+
+
+############################
+# GetAssignmentStatistics
+############################
+
+
+@router.get("/{id}/statistics")
+async def get_assignment_statistics(id: str, user=Depends(get_verified_user)):
+    """
+    获取作业统计信息：提交率、平均分、成绩分布等
+    """
+    assignment = Assignments.get_assignment_by_id(id)
+    if not assignment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_MESSAGES.NOT_FOUND
+        )
+
+    # Check permission
+    if user.role not in ["admin", "teacher"] and user.id != assignment.teacher_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail=ERROR_MESSAGES.DEFAULT()
+        )
+
+    try:
+        from open_webui.models.submissions import Submissions
+        from open_webui.models.users import Users
+
+        # Get all submissions for this assignment
+        submissions = Submissions.get_submissions_by_assignment_id(id)
+
+        # Get all students
+        all_users = Users.get_users()
+        students = [u for u in all_users if u.role == "student"]
+        total_students = len(students)
+
+        # Calculate statistics
+        submitted_count = len([s for s in submissions if s.status in ["submitted", "graded"]])
+        graded_count = len([s for s in submissions if s.status == "graded"])
+        
+        # Score statistics
+        scores = [s.score for s in submissions if s.score is not None and s.status == "graded"]
+        avg_score = round(sum(scores) / len(scores), 1) if scores else 0
+        max_score = max(scores) if scores else 0
+        min_score = min(scores) if scores else 0
+
+        # Grade distribution
+        grade_counts = {"A": 0, "B": 0, "C": 0, "D": 0, "F": 0}
+        for s in submissions:
+            if s.grade and s.grade in grade_counts:
+                grade_counts[s.grade] += 1
+
+        return {
+            "assignment_id": id,
+            "total_students": total_students,
+            "submitted_count": submitted_count,
+            "graded_count": graded_count,
+            "submission_rate": round(submitted_count / total_students * 100, 1) if total_students > 0 else 0,
+            "avg_score": avg_score,
+            "max_score": max_score,
+            "min_score": min_score,
+            "grade_distribution": grade_counts
+        }
+    except Exception as e:
+        log.exception(e)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.DEFAULT()
+        )
+
+
+############################
+# ExportAssignmentGrades
+############################
+
+
+@router.get("/{id}/export")
+async def export_assignment_grades(id: str, user=Depends(get_verified_user)):
+    """
+    导出作业成绩为 CSV 格式
+    """
+    assignment = Assignments.get_assignment_by_id(id)
+    if not assignment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_MESSAGES.NOT_FOUND
+        )
+
+    # Check permission
+    if user.role not in ["admin", "teacher"] and user.id != assignment.teacher_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail=ERROR_MESSAGES.DEFAULT()
+        )
+
+    try:
+        from open_webui.models.submissions import Submissions
+        from open_webui.models.users import Users
+        from fastapi.responses import StreamingResponse
+        import io
+        import csv
+        from datetime import datetime
+
+        # Get all submissions
+        submissions = Submissions.get_submissions_by_assignment_id(id)
+        
+        # Create CSV in memory
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Write header
+        writer.writerow([
+            "学生姓名",
+            "学生邮箱",
+            "提交状态",
+            "得分",
+            "等级",
+            "提交时间",
+            "批改时间"
+        ])
+        
+        # Write data
+        for submission in submissions:
+            student = Users.get_user_by_id(submission.student_id)
+            if not student:
+                continue
+                
+            submitted_at = datetime.fromtimestamp(submission.submitted_at).strftime("%Y-%m-%d %H:%M") if submission.submitted_at else ""
+            graded_at = datetime.fromtimestamp(submission.graded_at).strftime("%Y-%m-%d %H:%M") if submission.graded_at else ""
+            
+            writer.writerow([
+                student.name,
+                student.email,
+                "已提交" if submission.status == "submitted" else "已批改" if submission.status == "graded" else "草稿",
+                submission.score if submission.score is not None else "",
+                submission.grade or "",
+                submitted_at,
+                graded_at
+            ])
+        
+        # Prepare response
+        output.seek(0)
+        
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f"attachment; filename=assignment_{id}_grades.csv"
+            }
+        )
+    except Exception as e:
+        log.exception(e)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.DEFAULT()
+        )

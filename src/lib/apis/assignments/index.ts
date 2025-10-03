@@ -232,3 +232,58 @@ export const deleteAssignmentById = async (token: string, id: string) => {
 
 	return res;
 };
+
+
+export interface AssignmentStatistics {
+    assignment_id: string;
+    total_students: number;
+    submitted_count: number;
+    graded_count: number;
+    submission_rate: number;
+    avg_score: number;
+    max_score: number;
+    min_score: number;
+    grade_distribution: {
+        A: number;
+        B: number;
+        C: number;
+        D: number;
+        F: number;
+    };
+}
+
+export const getAssignmentStatistics = async (
+    token: string,
+    id: string
+): Promise<AssignmentStatistics> => {
+    const res = await fetch(`${WEBUI_API_BASE_URL}/assignments/${id}/statistics`, {
+        method: "GET",
+        headers: {
+            Accept: "application/json",
+            authorization: `Bearer ${token}`
+        }
+    });
+
+    if (\!res.ok) {
+        const error = await res.json();
+        throw new Error(error.detail || "Failed to get assignment statistics");
+    }
+
+    return res.json();
+};
+
+export const exportAssignmentGrades = async (token: string, id: string): Promise<Blob> => {
+    const res = await fetch(`${WEBUI_API_BASE_URL}/assignments/${id}/export`, {
+        method: "GET",
+        headers: {
+            authorization: `Bearer ${token}`
+        }
+    });
+
+    if (\!res.ok) {
+        const error = await res.json();
+        throw new Error(error.detail || "Failed to export grades");
+    }
+
+    return res.blob();
+};
