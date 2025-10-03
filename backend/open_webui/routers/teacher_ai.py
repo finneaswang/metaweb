@@ -144,7 +144,7 @@ async def ask_teacher_ai(
     
     # 获取作业记录
     try:
-        submissions = Submissions.get_by_student_id(request.student_id)
+        submissions = Submissions.get_submissions_by_student_id(request.student_id)
         submissions_data = [
             {
                 "score": s.score,
