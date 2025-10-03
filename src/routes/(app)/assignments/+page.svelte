@@ -17,7 +17,7 @@
 		gradeSubmission
 	} from '$lib/apis/submissions';
 	import { toast } from 'svelte-sonner';
-    import AssignmentStatistics from '/components/assignments/AssignmentStatistics.svelte';
+    import AssignmentStatistics from '$lib/components/assignments/AssignmentStatistics.svelte';
 
 	const i18n = getContext('i18n');
 
@@ -27,6 +27,7 @@
 	let selectedAssignment = null;
 	let selectedSubmission = null;
 	let assignmentSubmissions = [];
+    let userRole = $user?.role || 'student';
 	
 	// 教师创建/编辑作业
 	let assignmentForm = {
