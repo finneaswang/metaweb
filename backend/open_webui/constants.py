@@ -119,3 +119,11 @@ class TASKS(str, Enum):
     AUTOCOMPLETE_GENERATION = "autocomplete_generation"
     FUNCTION_CALLING = "function_calling"
     MOA_RESPONSE_GENERATION = "moa_response_generation"
+
+
+class ROLES(str, Enum):
+    """User role constants for education system"""
+    STUDENT = "student"
+    TEACHER = "teacher"  
+    LEADER = "leader"
+    ADMIN = "admin"

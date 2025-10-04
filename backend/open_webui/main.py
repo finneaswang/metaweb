@@ -83,6 +83,7 @@ from open_webui.routers import (
     llm_proxy,
     nightly_analysis,
     teacher_ai,
+    leader_dashboard,
     folders,
     configs,
     groups,
@@ -1273,6 +1274,7 @@ app.include_router(submissions.router, prefix="/api/v1/submissions", tags=["subm
 app.include_router(llm_proxy.router, prefix="/api/v1/llm", tags=["llm"])
 app.include_router(nightly_analysis.router, prefix="/api/v1/nightly", tags=["nightly"])
 app.include_router(teacher_ai.router, prefix="/api/v1/teacher", tags=["teacher"])
+app.include_router(leader_dashboard.router, prefix="/api/v1/leader", tags=["leader"])
 
 
 app.include_router(models.router, prefix="/api/v1/models", tags=["models"])
@@ -1799,7 +1801,7 @@ async def get_app_config(request: Request):
                     else {}
                 ),
             }
-            if user is not None and (user.role in ["admin", "teacher", "student"])
+            if user is not None and (user.role in ["admin", "teacher", "leader", "student"])
             else {
                 **(
                     {
