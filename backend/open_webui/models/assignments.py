@@ -34,6 +34,13 @@ class Assignment(Base):
     max_score = Column(Float, default=100.0)  # 满分
     attachments = Column(JSON, nullable=True)  # 附件列表
     status = Column(Text, default="draft")  # draft, published, closed
+    
+    # Rubric 评分标准
+    rubric_json = Column(JSON, nullable=True)  # 评分准则
+    grading_formula_json = Column(JSON, nullable=True)  # 计分公式
+    
+    # AI 辅助开关
+    ai_assist = Column(Boolean, default=False)  # 是否启用AI辅助评分
 
     access_control = Column(JSON, nullable=True)
 
@@ -55,6 +62,10 @@ class AssignmentModel(BaseModel):
     max_score: float = 100.0
     attachments: Optional[list] = None
     status: str = "draft"
+    
+    rubric_json: Optional[dict] = None
+    grading_formula_json: Optional[dict] = None
+    ai_assist: bool = False
 
     access_control: Optional[dict] = None
 
@@ -75,6 +86,9 @@ class AssignmentForm(BaseModel):
     max_score: Optional[float] = 100.0
     attachments: Optional[list] = None
     status: Optional[str] = "draft"
+    rubric_json: Optional[dict] = None
+    grading_formula_json: Optional[dict] = None
+    ai_assist: Optional[bool] = False
     access_control: Optional[dict] = None
 
 
@@ -86,6 +100,9 @@ class AssignmentUpdateForm(BaseModel):
     max_score: Optional[float] = None
     attachments: Optional[list] = None
     status: Optional[str] = None
+    rubric_json: Optional[dict] = None
+    grading_formula_json: Optional[dict] = None
+    ai_assist: Optional[bool] = None
     access_control: Optional[dict] = None
 
 

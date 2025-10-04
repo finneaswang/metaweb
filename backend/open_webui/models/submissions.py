@@ -26,17 +26,25 @@ class Submission(Base):
     content = Column(Text, nullable=True)  # 学生提交的答案内容
     attachments = Column(JSON, nullable=True)  # 附件列表
     
-    status = Column(Text, default="draft")  # draft, submitted, graded
+    status = Column(Text, default="draft")  # draft, submitted, ai_reviewed, graded, released
     submitted_at = Column(BigInteger, nullable=True)
     
     # 成绩相关
-    score = Column(Float, nullable=True)  # 得分
+    score = Column(Float, nullable=True)  # 最终总分
     max_score = Column(Float, nullable=True)  # 满分（从 assignment 复制）
     grade = Column(Text, nullable=True)  # 等级 A/B/C/D/F
     feedback = Column(Text, nullable=True)  # 老师评语
     
+    # Rubric 分项得分
+    rubric_scores_json = Column(JSON, nullable=True)  # 各项评分 {"logic": 3, "accuracy": 4.5, ...}
+    
     # AI 分析
     ai_analysis = Column(JSON, nullable=True)  # AI分析结果
+    ai_feedback_draft = Column(Text, nullable=True)  # AI生成的评语草稿
+    
+    # 批改人
+    grader_id = Column(Text, nullable=True)  # 批改教师ID
+    graded_at = Column(BigInteger, nullable=True)  # 批改时间
 
     created_at = Column(BigInteger)
     updated_at = Column(BigInteger)
@@ -60,7 +68,12 @@ class SubmissionModel(BaseModel):
     grade: Optional[str] = None
     feedback: Optional[str] = None
     
+    rubric_scores_json: Optional[dict] = None
     ai_analysis: Optional[dict] = None
+    ai_feedback_draft: Optional[str] = None
+    
+    grader_id: Optional[str] = None
+    graded_at: Optional[int] = None
 
     created_at: int
     updated_at: int
@@ -84,11 +97,21 @@ class SubmissionUpdateForm(BaseModel):
     score: Optional[float] = None
     grade: Optional[str] = None
     feedback: Optional[str] = None
+    rubric_scores_json: Optional[dict] = None
     ai_analysis: Optional[dict] = None
+    ai_feedback_draft: Optional[str] = None
+
+
+class GradeSubmissionForm(BaseModel):
+    """教师评分表单"""
+    rubric_scores_json: dict  # 各项得分
+    feedback: Optional[str] = None  # 评语
+    adopt_ai_draft: Optional[bool] = False  # 是否采纳AI草稿
 
 
 class SubmissionResponse(SubmissionModel):
     student: Optional[UserResponse] = None
+    grader: Optional[UserResponse] = None
 
 
 class SubmissionTable:
@@ -178,6 +201,31 @@ class SubmissionTable:
 
             submission.updated_at = int(time.time())
 
+            db.commit()
+            return SubmissionModel.model_validate(submission)
+    
+    def grade_submission(
+        self,
+        submission_id: str,
+        grader_id: str,
+        rubric_scores: dict,
+        feedback: Optional[str] = None,
+        total_score: Optional[float] = None,
+    ) -> Optional[SubmissionModel]:
+        """教师评分"""
+        with get_db() as db:
+            submission = db.query(Submission).filter(Submission.id == submission_id).first()
+            if not submission:
+                return None
+            
+            submission.rubric_scores_json = rubric_scores
+            submission.feedback = feedback
+            submission.score = total_score
+            submission.grader_id = grader_id
+            submission.graded_at = int(time.time())
+            submission.status = "graded"
+            submission.updated_at = int(time.time())
+            
             db.commit()
             return SubmissionModel.model_validate(submission)
 

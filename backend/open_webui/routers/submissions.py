@@ -345,9 +345,11 @@ async def submit_submission(
 
 
 class GradeForm(BaseModel):
-    score: float
+    score: Optional[float] = None  # 总分（可选，可从rubric_scores计算）
     grade: Optional[str] = None
     feedback: Optional[str] = None
+    rubric_scores: Optional[dict] = None  # Rubric各项得分 {"logic": 3, "accuracy": 4.5}
+    adopt_ai_draft: Optional[bool] = False  # 是否采纳AI草稿
 
 
 @router.post("/{id}/grade", response_model=Optional[SubmissionModel])
@@ -383,10 +385,19 @@ async def grade_submission(
         )
 
     try:
+        # Calculate total score from rubric if not provided
+        if form_data.rubric_scores and not form_data.score:
+            # Simple average for now, can be enhanced with weighted formula
+            rubric_values = [v for v in form_data.rubric_scores.values() if isinstance(v, (int, float))]
+            if rubric_values and assignment.max_score:
+                avg_rubric_score = sum(rubric_values) / len(rubric_values)
+                form_data.score = (avg_rubric_score / 5.0) * assignment.max_score  # Assume 0-5 scale
+        
         update_form = SubmissionUpdateForm(
             score=form_data.score,
             grade=form_data.grade,
             feedback=form_data.feedback,
+            rubric_scores_json=form_data.rubric_scores,
             status="graded"
         )
         submission = Submissions.update_submission_by_id(id, update_form)
