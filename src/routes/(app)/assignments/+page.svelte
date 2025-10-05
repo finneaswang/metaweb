@@ -18,6 +18,7 @@
 	} from '$lib/apis/submissions';
 	import { toast } from 'svelte-sonner';
     import AssignmentStatistics from '$lib/components/assignments/AssignmentStatistics.svelte';
+    import RubricEditor from '$lib/components/assignments/RubricEditor.svelte';
 
 	const i18n = getContext('i18n');
 
@@ -36,6 +37,8 @@
 		content: '',
 		due_date: '',
 		max_score: 100,
+t	ai_assist: false,
+		rubric_json: { criteria: [] },
 		status: 'draft'
 	};
 	
@@ -385,6 +388,29 @@
 								/>
 							</div>
 						</div>
+						<!-- AI辅助评分选项 -->
+						<div class="flex items-center gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+							<input
+								type="checkbox"
+								id="ai_assist"
+								bind:checked={assignmentForm.ai_assist}
+								class="w-4 h-4 text-blue-600 rounded"
+							/>
+							<label for="ai_assist" class="text-sm font-medium cursor-pointer">
+								🤖 启用AI辅助评分
+							</label>
+						</div>
+
+						<!-- Rubric编辑器 -->
+						{#if assignmentForm.ai_assist}
+							<div class="space-y-2">
+								<label class="block text-sm font-medium">评分标准 (Rubric)</label>
+								<RubricEditor 
+									bind:rubric={assignmentForm.rubric_json}
+									on:change={(e) => assignmentForm.rubric_json = e.detail}
+								/>
+							</div>
+						{/if}
 						<div class="flex gap-2 pt-4">
 							<button
 								on:click={createAssignment}
