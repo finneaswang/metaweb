@@ -1,0 +1,210 @@
+"""
+AI Grading Processor - Process AI grading tasks
+"""
+
+import logging
+import json
+from datetime import datetime
+from typing import Optional, Dict, Any
+from sqlalchemy import text
+
+from open_webui.internal.db import Session
+from open_webui.metaweb.services.ai_service import AIService
+
+logger = logging.getLogger(__name__)
+
+
+class AIGradingProcessor:
+    def __init__(self, db: Session):
+        self.db = db
+        self.ai_service = AIService()
+
+    async def process_submission_grading(
+        self,
+        submission_id: str,
+        assignment_id: str
+    ) -> bool:
+        try:
+            logger.info(f"Starting AI grading: submission={submission_id}")
+
+            submission_data = await self._get_submission_data(submission_id)
+            assignment_data = await self._get_assignment_data(assignment_id)
+
+            if not submission_data or not assignment_data:
+                logger.error("Could not find assignment or submission data")
+                return False
+
+            student_answer = self._extract_student_answer(submission_data)
+            question_content = assignment_data.get("description", "")
+
+            grading_result = await self.ai_service.grade_submission(
+                subject=assignment_data["subject"],
+                grade_level=assignment_data.get("grade_level", ""),
+                question_content=question_content,
+                student_answer=student_answer,
+                total_points=assignment_data["total_points"],
+                grading_rubric=assignment_data.get("grading_rubric", ""),
+                use_smart_model=False
+            )
+
+            if not grading_result:
+                logger.error("AI grading failed")
+                return False
+
+            success = await self._save_grading_result(
+                submission_id,
+                grading_result,
+                assignment_data["grading_mode"]
+            )
+
+            if success:
+                logger.info(f"AI grading completed: submission={submission_id}")
+
+            return success
+
+        except Exception as e:
+            logger.error(f"Error processing AI grading task: {e}", exc_info=True)
+            return False
+
+    async def _get_submission_data(self, submission_id: str) -> Optional[Dict]:
+        try:
+            query = text("""
+                SELECT
+                    id, assignment_id, student_id, answer_type,
+                    answer_files, answer_text, ocr_text, submitted_at
+                FROM submission
+                WHERE id = :submission_id
+            """)
+
+            result = self.db.execute(query, {"submission_id": submission_id}).fetchone()
+
+            if not result:
+                return None
+
+            return {
+                "id": result[0],
+                "assignment_id": result[1],
+                "student_id": result[2],
+                "answer_type": result[3],
+                "answer_files": json.loads(result[4]) if result[4] else [],
+                "answer_text": result[5],
+                "ocr_text": result[6],
+                "submitted_at": result[7]
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get submission data: {e}")
+            return None
+
+    async def _get_assignment_data(self, assignment_id: str) -> Optional[Dict]:
+        try:
+            query = text("""
+                SELECT
+                    id, subject, grade_level, description,
+                    total_points, grading_mode, grading_rubric
+                FROM assignment
+                WHERE id = :assignment_id
+            """)
+
+            result = self.db.execute(query, {"assignment_id": assignment_id}).fetchone()
+
+            if not result:
+                return None
+
+            return {
+                "id": result[0],
+                "subject": result[1],
+                "grade_level": result[2],
+                "description": result[3],
+                "total_points": result[4],
+                "grading_mode": result[5],
+                "grading_rubric": result[6]
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get assignment data: {e}")
+            return None
+
+    def _extract_student_answer(self, submission_data: Dict) -> str:
+        answer_parts = []
+
+        if submission_data.get("answer_text"):
+            answer_parts.append(f"Student Answer:\\n{submission_data[\"answer_text\"]}")
+
+        if submission_data.get("ocr_text"):
+            answer_parts.append(f"\\nOCR Content:\\n{submission_data[\"ocr_text\"]}")
+
+        if submission_data.get("answer_files"):
+            files = submission_data["answer_files"]
+            answer_parts.append(f"\\nSubmitted Files: {len(files)} file(s)")
+            for f in files:
+                answer_parts.append(f"- {f.get(\"name\", \"Unnamed file\")}")
+
+        return "\\n".join(answer_parts) if answer_parts else "(No answer content)"
+
+    async def _save_grading_result(
+        self,
+        submission_id: str,
+        grading_result: Dict[str, Any],
+        grading_mode: str
+    ) -> bool:
+        try:
+            current_time = int(datetime.now().timestamp())
+
+            ai_score = grading_result.get("score", 0)
+            ai_feedback = grading_result.get("feedback", "")
+            ai_detailed = grading_result.get("detailed_analysis", {})
+
+            if grading_mode == "ai_auto":
+                new_status = "graded"
+                final_score = ai_score
+            else:
+                new_status = "ai_reviewed"
+                final_score = None
+
+            update_query = text("""
+                UPDATE submission
+                SET
+                    ai_score = :ai_score,
+                    ai_feedback = :ai_feedback,
+                    ai_detailed_analysis = :ai_detailed,
+                    ai_graded_at = :ai_graded_at,
+                    teacher_score = :teacher_score,
+                    status = :status,
+                    updated_at = :updated_at
+                WHERE id = :submission_id
+            """)
+
+            self.db.execute(update_query, {
+                "submission_id": submission_id,
+                "ai_score": ai_score,
+                "ai_feedback": ai_feedback,
+                "ai_detailed": json.dumps(ai_detailed, ensure_ascii=False),
+                "ai_graded_at": current_time,
+                "teacher_score": final_score,
+                "status": new_status,
+                "updated_at": current_time
+            })
+
+            self.db.commit()
+
+            logger.info(f"Saved AI grading result: submission={submission_id}, mode={grading_mode}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to save grading result: {e}")
+            self.db.rollback()
+            return False
+
+
+async def trigger_ai_grading(
+    db: Session,
+    submission_id: str,
+    assignment_id: str
+) -> bool:
+    """
+    Trigger AI grading (synchronous version)
+    Called immediately after student submits assignment
+    """
+    processor = AIGradingProcessor(db)
+    return await processor.process_submission_grading(submission_id, assignment_id)

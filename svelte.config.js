@@ -3,6 +3,8 @@ import * as child_process from 'node:child_process';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 import fs from 'node:fs';
 
+const buildDir = process.env.OPENWEBUI_BUILD_DIR || 'build';
+
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
 	// Consult https://kit.svelte.dev/docs/integrations#preprocessors
@@ -13,8 +15,8 @@ const config = {
 		// If your environment is not supported or you settled on a specific environment, switch out the adapter.
 		// See https://kit.svelte.dev/docs/adapters for more information about adapters.
 		adapter: adapter({
-			pages: 'build',
-			assets: 'build',
+			pages: buildDir,
+			assets: buildDir,
 			fallback: 'index.html'
 		}),
 		// poll for new version name every 60 seconds (to trigger reload mechanic in +layout.svelte)

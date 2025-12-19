@@ -128,7 +128,8 @@
 		await setSessionUser(sessionUser, localStorage.getItem('redirectPath') || null);
 	};
 
-	let onboarding = false;
+	let onboarding = true;
+	const shouldSkipOnboarding = () => $page.url.searchParams.get('skipOnboarding') === '1';
 
 	async function setLogoImage() {
 		await tick();
@@ -175,9 +176,10 @@
 		setLogoImage();
 
 		if (($config?.features.auth_trusted_header ?? false) || $config?.features.auth === false) {
+			onboarding = false;
 			await signInHandler();
 		} else {
-			onboarding = $config?.onboarding ?? false;
+			onboarding = !shouldSkipOnboarding();
 		}
 	});
 </script>
@@ -192,7 +194,7 @@
 	bind:show={onboarding}
 	getStartedHandler={() => {
 		onboarding = false;
-		mode = $config?.features.enable_ldap ? 'ldap' : 'signup';
+		mode = $config?.features.enable_ldap ? 'ldap' : 'signin';
 	}}
 />
 
@@ -207,6 +209,9 @@
 			id="auth-container"
 		>
 			<div class="w-full px-10 min-h-screen flex flex-col text-center">
+				{#if onboarding}
+					<div class="my-auto pb-10 w-full sm:max-w-md mx-auto"></div>
+				{:else}
 				{#if ($config?.features.auth_trusted_header ?? false) || $config?.features.auth === false}
 					<div class=" my-auto pb-10 w-full sm:max-w-md">
 						<div
@@ -564,6 +569,7 @@
 							</div>
 						{/if}
 					</div>
+				{/if}
 				{/if}
 			</div>
 		</div>

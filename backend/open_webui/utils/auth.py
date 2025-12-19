@@ -46,6 +46,16 @@ log.setLevel(SRC_LOG_LEVELS["OAUTH"])
 SESSION_SECRET = WEBUI_SECRET_KEY
 ALGORITHM = "HS256"
 
+# MetaWeb custom roles that should be treated as fully verified users
+VERIFIED_USER_ROLES = {
+    "admin",
+    "user",
+    "teacher",
+    "student",
+    "leader",
+    "counselor",
+}
+
 ##############
 # Auth Utils
 ##############
@@ -350,7 +360,7 @@ def get_current_user_by_api_key(api_key: str):
 
 
 def get_verified_user(user=Depends(get_current_user)):
-    if user.role not in {"user", "admin"}:
+    if user.role not in VERIFIED_USER_ROLES:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=ERROR_MESSAGES.ACCESS_PROHIBITED,
@@ -363,5 +373,36 @@ def get_admin_user(user=Depends(get_current_user)):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=ERROR_MESSAGES.ACCESS_PROHIBITED,
+        )
+    return user
+
+
+# MetaWeb Role-based Authentication
+def get_teacher_user(user=Depends(get_current_user)):
+    """Verify user has teacher, leader, or admin role"""
+    if user.role not in {"teacher", "leader", "admin"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Teacher, Leader, or Admin role required"
+        )
+    return user
+
+
+def get_student_user(user=Depends(get_current_user)):
+    """Verify user has student role"""
+    if user.role != "student":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Student role required"
+        )
+    return user
+
+
+def get_counselor_user(user=Depends(get_current_user)):
+    """Verify user has counselor, leader, or admin role (data viewing roles)"""
+    if user.role not in {"counselor", "leader", "admin"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Counselor, Leader, or Admin role required"
         )
     return user

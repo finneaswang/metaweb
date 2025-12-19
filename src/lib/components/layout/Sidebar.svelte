@@ -677,6 +677,41 @@
 						</Tooltip>
 					</div>
 				{/if}
+
+					<div class="">
+						<Tooltip content={$i18n.t('Personal Data Center')} placement="right">
+							<a
+								class=" cursor-pointer flex rounded-xl hover:bg-gray-100 dark:hover:bg-gray-850 transition group"
+								href="/personal-data-center"
+								on:click={async (e) => {
+									e.stopImmediatePropagation();
+									e.preventDefault();
+
+									goto('/personal-data-center');
+									itemClickHandler();
+								}}
+								aria-label={$i18n.t('Personal Data Center')}
+								draggable="false"
+							>
+								<div class=" self-center flex items-center justify-center size-9">
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										fill="none"
+										viewBox="0 0 24 24"
+										stroke-width="2"
+										stroke="currentColor"
+										class="size-4.5"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M12 3 L12 7 M12 17 L12 21 M3 12 L7 12 M17 12 L21 12 M5.2 5.2 L7.9 7.9 M16.1 16.1 L18.8 18.8 M5.2 18.8 L7.9 16.1 M16.1 7.9 L18.8 5.2 M8.5 4 L10 7 M14 17 L15.5 20 M4 8.5 L7 10 M17 14 L20 15.5"
+										/>
+									</svg>
+								</div>
+							</a>
+						</Tooltip>
+					</div>
 			</div>
 		</button>
 
@@ -888,6 +923,38 @@
 							</a>
 						</div>
 					{/if}
+
+						<div class="px-[7px] flex justify-center text-gray-800 dark:text-gray-200">
+							<a
+								id="sidebar-assignments-button"
+								class="grow flex items-center space-x-3 rounded-2xl px-2.5 py-2 hover:bg-gray-100 dark:hover:bg-gray-900 transition"
+								href="/personal-data-center"
+								on:click={itemClickHandler}
+								draggable="false"
+								aria-label={$i18n.t('Personal Data Center')}
+							>
+								<div class="self-center">
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										fill="none"
+										viewBox="0 0 24 24"
+										stroke-width="2"
+										stroke="currentColor"
+										class="size-4.5"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M12 3 L12 7 M12 17 L12 21 M3 12 L7 12 M17 12 L21 12 M5.2 5.2 L7.9 7.9 M16.1 16.1 L18.8 18.8 M5.2 18.8 L7.9 16.1 M16.1 7.9 L18.8 5.2 M8.5 4 L10 7 M14 17 L15.5 20 M4 8.5 L7 10 M17 14 L20 15.5"
+										/>
+									</svg>
+								</div>
+
+								<div class="flex self-center translate-y-[0.5px]">
+									<div class=" self-center text-sm font-primary">{$i18n.t('Personal Data Center')}</div>
+								</div>
+							</a>
+						</div>
 				</div>
 
 				{#if ($models ?? []).length > 0 && ($settings?.pinnedModels ?? []).length > 0}

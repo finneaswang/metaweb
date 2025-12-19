@@ -67,6 +67,7 @@ from open_webui.socket.main import (
     get_models_in_use,
     get_active_user_ids,
 )
+from open_webui.routers.metaweb.ai_secretary import start_ai_secretary, stop_ai_secretary
 from open_webui.routers import (
     audio,
     images,
@@ -94,6 +95,11 @@ from open_webui.routers import (
     utils,
     scim,
 )
+
+# MetaWeb Student Assignment System
+from open_webui.metaweb import assignments_router, submissions_router, profiles_router, ai_assistant_router
+from open_webui.routers import metaweb
+from open_webui.routers import pdc
 
 from open_webui.routers.retrieval import (
     get_embedding_function,
@@ -598,6 +604,13 @@ async def lifespan(app: FastAPI):
 
     asyncio.create_task(periodic_usage_pool_cleanup())
 
+    # Start AI Secretary for MetaWeb student analysis
+    try:
+        start_ai_secretary()
+        log.info("AI Secretary started successfully")
+    except Exception as e:
+        log.error(f"Failed to start AI Secretary: {str(e)}")
+
     if app.state.config.ENABLE_BASE_MODELS_CACHE:
         await get_all_models(
             Request(
@@ -620,6 +633,13 @@ async def lifespan(app: FastAPI):
         )
 
     yield
+
+    # Stop AI Secretary
+    try:
+        stop_ai_secretary()
+        log.info("AI Secretary stopped successfully")
+    except Exception as e:
+        log.error(f"Failed to stop AI Secretary: {str(e)}")
 
     if hasattr(app.state, "redis_task_command_listener"):
         app.state.redis_task_command_listener.cancel()
@@ -1354,6 +1374,14 @@ app.include_router(
 )
 app.include_router(utils.router, prefix="/api/v1/utils", tags=["utils"])
 
+# MetaWeb Student Assignment System
+app.include_router(assignments_router)
+app.include_router(submissions_router)
+app.include_router(profiles_router, prefix="/api/metaweb/profiles", tags=["profiles"])
+app.include_router(pdc.router, prefix="/api/v1/pdc", tags=["pdc"])
+app.include_router(ai_assistant_router, prefix="/api/metaweb/ai-assistant", tags=["ai-assistant"])
+app.include_router(metaweb.router)  # Knowledge Graph & Student Profiles
+
 # SCIM 2.0 API for identity management
 if SCIM_ENABLED:
     app.include_router(scim.router, prefix="/api/v1/scim/v2", tags=["scim"])
@@ -1362,7 +1390,7 @@ if SCIM_ENABLED:
 try:
     audit_level = AuditLevel(AUDIT_LOG_LEVEL)
 except ValueError as e:
-    logger.error(f"Invalid audit level: {AUDIT_LOG_LEVEL}. Error: {e}")
+    log.error(f"Invalid audit level: {AUDIT_LOG_LEVEL}. Error: {e}")
     audit_level = AuditLevel.NONE
 
 if audit_level != AuditLevel.NONE:
@@ -1767,7 +1795,7 @@ async def get_app_config(request: Request):
         onboarding = user_count == 0
 
     return {
-        **({"onboarding": True} if onboarding else {}),
+        "onboarding": onboarding,
         "status": True,
         "name": app.state.WEBUI_NAME,
         "version": VERSION,

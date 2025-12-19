@@ -1,0 +1,8 @@
+# MetaWeb Student Assignment System
+# AI-Powered Assignment Management Platform
+
+__version__ = "0.1.0"
+
+from .routers import assignments_router, submissions_router, profiles_router
+
+__all__ = [assignments_router, submissions_router, profiles_router]

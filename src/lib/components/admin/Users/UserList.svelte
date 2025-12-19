@@ -352,7 +352,13 @@
 								}}
 							>
 								<Badge
-									type={user.role === 'admin' ? 'info' : user.role === 'user' ? 'success' : 'muted'}
+									type={
+										user.role === 'admin' ? 'info' : 
+										user.role === 'teacher' || user.role === 'leader' ? 'warning' : 
+										user.role === 'student' ? 'success' : 
+										user.role === 'counselor' ? 'info' :
+										user.role === 'pending' ? 'muted' : 'muted'
+									}
 									content={$i18n.t(user.role)}
 								/>
 							</button>

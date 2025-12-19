@@ -1,0 +1,360 @@
+# open_webui/metaweb/routers/submissions.py
+# Student Submission API Endpoints
+
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, BackgroundTasks
+from typing import List, Optional
+import uuid
+from datetime import datetime
+import logging
+import io
+import json
+
+from ..models.submission import (
+    SubmissionCreate,
+    SubmissionUpdate,
+    SubmissionResponse,
+    SubmissionStatus,
+    GradingResult
+)
+from ..services import db_service, file_storage, cache, ai_service
+from open_webui.utils.auth import get_current_user, get_teacher_user, get_student_user
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api/metaweb/submissions", tags=["submissions"])
+
+
+async def ai_grade_submission_task(
+    submission_id: str,
+    assignment_id: str,
+    student_answer: str,
+    grading_mode: str
+):
+    """Background task to grade submission with AI"""
+    try:
+        logger.info(f"Starting AI grading for submission {submission_id}")
+
+        # Get assignment details
+        assignment = db_service.get_assignment(assignment_id)
+        if not assignment:
+            logger.error(f"Assignment {assignment_id} not found")
+            return
+
+        # Update status to AI reviewing
+        db_service.update_submission(submission_id, {'status': 'ai_reviewing'})
+
+        # Call AI service to grade
+        result = await ai_service.grade_submission(
+            subject=assignment['subject'],
+            grade_level=assignment.get('grade_level', 'Unknown'),
+            question_content=assignment.get('description', ''),
+            student_answer=student_answer,
+            total_points=assignment['total_points'],
+            grading_rubric=assignment.get('grading_rubric', ''),
+            use_smart_model=(grading_mode == 'ai_auto')
+        )
+
+        if result:
+            # Update submission with AI results
+            update_data = {
+                'ai_score': result.get('score', 0),
+                'ai_feedback': result.get('feedback', ''),
+                'ai_graded_at': datetime.now().isoformat(),
+                'status': 'ai_reviewed' if grading_mode == 'ai_draft' else 'graded'
+            }
+
+            db_service.update_submission(submission_id, update_data)
+
+            # Record mistakes if any
+            if result.get('detailed_analysis', {}).get('mistakes'):
+                for mistake in result['detailed_analysis']['mistakes']:
+                    mistake_data = {
+                        'id': str(uuid.uuid4()),
+                        'submission_id': submission_id,
+                        'assignment_id': assignment_id,
+                        'student_id': db_service.get_submission(submission_id)['student_id'],
+                        'question_number': 1,  # TODO: Handle multiple questions
+                        'student_answer': student_answer,
+                        'correct_answer': '',  # TODO: Get from assignment
+                        'mistake_type': mistake.get('type', 'unknown'),
+                        'knowledge_points': result.get('detailed_analysis', {}).get('knowledge_points', []),
+                        'ai_analysis': mistake.get('description', ''),
+                        'ai_suggestions': mistake.get('location', '')
+                    }
+                    db_service.create_mistake(mistake_data)
+
+            logger.info(f"AI grading completed for submission {submission_id}")
+        else:
+            logger.error(f"AI grading failed for submission {submission_id}")
+            db_service.update_submission(submission_id, {'status': 'submitted'})
+
+    except Exception as e:
+        logger.error(f"Error in AI grading task: {e}")
+        db_service.update_submission(submission_id, {'status': 'submitted'})
+
+
+@router.post("", response_model=SubmissionResponse)
+async def create_submission(
+    submission: SubmissionCreate,
+    background_tasks: BackgroundTasks,
+    user=Depends(get_student_user)
+):
+    """Submit assignment (student only)"""
+    try:
+        # Verify assignment exists and is published
+        assignment = db_service.get_assignment(submission.assignment_id)
+
+        if not assignment:
+            raise HTTPException(status_code=404, detail="Assignment not found")
+
+        if assignment['status'] != 'published':
+            raise HTTPException(status_code=400, detail="Assignment not available for submission")
+
+        # Check if already submitted
+        existing = db_service.list_submissions(
+            assignment_id=submission.assignment_id,
+            student_id=user.id
+        )
+
+        if existing:
+            raise HTTPException(status_code=400, detail="Already submitted")
+
+        # Check if past due date
+        due_date = datetime.fromisoformat(assignment['due_date'])
+        is_late = datetime.now() > due_date
+
+        if is_late and not assignment['allow_late_submission']:
+            raise HTTPException(status_code=400, detail="Submission deadline has passed")
+
+        # Generate submission ID
+        submission_id = str(uuid.uuid4())
+
+        # Prepare submission data
+        submission_data = {
+            'id': submission_id,
+            'assignment_id': submission.assignment_id,
+            'student_id': user_id,
+            'answer_type': submission.answer_type,
+            'answer_files': submission.answer_files,
+            'answer_text': submission.answer_text,
+            'time_spent_seconds': submission.time_spent_seconds,
+            'status': 'submitted',
+            'is_late': is_late
+        }
+
+        # Save to database
+        result = db_service.create_submission(submission_data)
+
+        if not result:
+            raise HTTPException(status_code=500, detail="Failed to create submission")
+
+        # Trigger AI grading if enabled
+        grading_mode = assignment['grading_mode']
+        if grading_mode in ['ai_draft', 'ai_auto']:
+            student_answer = submission.answer_text or str(submission.answer_files)
+
+            background_tasks.add_task(
+                ai_grade_submission_task,
+                submission_id,
+                submission.assignment_id,
+                student_answer,
+                grading_mode
+            )
+
+        # Return created submission
+        created = db_service.get_submission(submission_id)
+        return SubmissionResponse(**created)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating submission: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{submission_id}", response_model=SubmissionResponse)
+async def get_submission(
+    submission_id: str,
+    user=Depends(get_current_user)
+):
+    """Get submission details"""
+    try:
+        submission = db_service.get_submission(submission_id)
+
+        if not submission:
+            raise HTTPException(status_code=404, detail="Submission not found")
+
+        # Check authorization
+        assignment = db_service.get_assignment(submission['assignment_id'])
+        is_teacher = assignment['teacher_id'] == user.id
+        is_owner = submission['student_id'] == user.id
+
+        if not (is_teacher or is_owner):
+            raise HTTPException(status_code=403, detail="Not authorized")
+
+        return SubmissionResponse(**submission)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching submission: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("", response_model=List[SubmissionResponse])
+async def list_submissions(
+    assignment_id: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+    user=Depends(get_current_user)
+):
+    """List submissions (filtered by role)"""
+    try:
+        # For students: only their own submissions
+        # For teachers: submissions for their assignments
+        submissions = db_service.list_submissions(
+            assignment_id=assignment_id,
+            student_id=user.id if user.role == "student" else None,
+            status=status,
+            limit=limit,
+            offset=offset
+        )
+
+        return [SubmissionResponse(**s) for s in submissions]
+
+    except Exception as e:
+        logger.error(f"Error listing submissions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch("/{submission_id}", response_model=SubmissionResponse)
+async def update_submission(
+    submission_id: str,
+    updates: SubmissionUpdate,
+    user=Depends(get_teacher_user)
+):
+    """Update submission grading (teacher only)"""
+    try:
+        submission = db_service.get_submission(submission_id)
+
+        if not submission:
+            raise HTTPException(status_code=404, detail="Submission not found")
+
+        # Verify teacher owns the assignment
+        assignment = db_service.get_assignment(submission['assignment_id'])
+
+        if assignment['teacher_id'] != user.id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+
+        # Prepare updates
+        update_data = updates.dict(exclude_unset=True)
+
+        if 'status' in update_data:
+            update_data['status'] = update_data['status'].value
+
+        # Add teacher graded timestamp
+        if 'teacher_score' in update_data or 'teacher_feedback' in update_data:
+            update_data['teacher_graded_at'] = datetime.now().isoformat()
+
+        # Update database
+        success = db_service.update_submission(submission_id, update_data)
+
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to update submission")
+
+        # Return updated submission
+        updated = db_service.get_submission(submission_id)
+        return SubmissionResponse(**updated)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating submission: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{submission_id}/files")
+async def upload_submission_file(
+    submission_id: str,
+    file: UploadFile = File(...),
+    user=Depends(get_student_user)
+):
+    """Upload submission file (student answer sheet, etc.)"""
+    try:
+        # Verify submission exists and user owns it
+        submission = db_service.get_submission(submission_id)
+
+        if not submission:
+            raise HTTPException(status_code=404, detail="Submission not found")
+
+        if submission['student_id'] != user.id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+
+        # Read file data
+        file_data = await file.read()
+        file_stream = io.BytesIO(file_data)
+
+        # Upload to MinIO
+        uploaded = file_storage.upload_file(
+            file_data=file_stream,
+            file_name=file.filename,
+            content_type=file.content_type,
+            folder=f"submissions/{submission_id}"
+        )
+
+        # Update submission answer_files
+        answer_files = json.loads(submission.get('answer_files', '[]'))
+        answer_files.append(uploaded)
+
+        db_service.update_submission(
+            submission_id,
+            {'answer_files': json.dumps(answer_files)}
+        )
+
+        return {
+            "message": "File uploaded successfully",
+            "file": uploaded
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error uploading submission file: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{submission_id}/mistakes")
+async def get_submission_mistakes(
+    submission_id: str,
+    user=Depends(get_current_user)
+):
+    """Get mistakes for a submission"""
+    try:
+        submission = db_service.get_submission(submission_id)
+
+        if not submission:
+            raise HTTPException(status_code=404, detail="Submission not found")
+
+        # Check authorization
+        assignment = db_service.get_assignment(submission['assignment_id'])
+        is_teacher = assignment['teacher_id'] == user.id
+        is_owner = submission['student_id'] == user.id
+
+        if not (is_teacher or is_owner):
+            raise HTTPException(status_code=403, detail="Not authorized")
+
+        # Get mistakes for this submission
+        mistakes = db_service.get_student_mistakes(submission['student_id'])
+        submission_mistakes = [m for m in mistakes if m['submission_id'] == submission_id]
+
+        return {
+            "submission_id": submission_id,
+            "mistakes": submission_mistakes
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching submission mistakes: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

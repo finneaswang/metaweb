@@ -62,7 +62,7 @@ class UserModel(BaseModel):
     email: str
     username: Optional[str] = None
 
-    role: str = "pending"
+    role: str
     profile_image_url: str
 
     bio: Optional[str] = None
@@ -156,8 +156,8 @@ class UsersTable:
         id: str,
         name: str,
         email: str,
+        role: str,
         profile_image_url: str = "/user.png",
-        role: str = "pending",
         oauth_sub: Optional[str] = None,
     ) -> Optional[UserModel]:
         with get_db() as db:
